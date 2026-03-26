@@ -2,21 +2,20 @@
 
 Web viewer for [Memory](https://github.com/martusha89/Memory) — connect to any Memory server, browse and manage memories from the browser.
 
-## Usage
+## Quick Start
 
-Open [memory-app.pages.dev](https://memory-app.pages.dev), enter your Memory server URL and secret, and you're in.
-
-Or host it yourself — it's a single HTML file with zero dependencies.
-
-### Shareable Links
-
-You can create direct links that auto-connect:
-
-```
-https://memory-app.pages.dev?server=https://your-server.workers.dev&secret=YOUR_SECRET
+```bash
+npx memory-app
 ```
 
-**Warning:** Anyone with this link has full access to the memory store. Share carefully.
+That's it. Opens a browser, enter your Memory server URL and secret, done.
+
+### Options
+
+```bash
+npx memory-app --port 4000    # Custom port (default: 3847)
+npx memory-app --no-open      # Don't auto-open browser
+```
 
 ## Features
 
@@ -26,6 +25,16 @@ https://memory-app.pages.dev?server=https://your-server.workers.dev&secret=YOUR_
 - **Pagination** for large memory stores
 - **Keyboard shortcuts** — `/` to search, `n` for new memory, `Esc` to close
 - **Auto-reconnect** — saves credentials in localStorage
+
+### Shareable Links
+
+Create direct links that auto-connect:
+
+```
+http://localhost:3847?server=https://your-server.workers.dev&secret=YOUR_SECRET
+```
+
+**Warning:** Anyone with this link has full access to the memory store. Share carefully.
 
 ## Requirements
 
@@ -37,19 +46,15 @@ git pull
 npm run deploy
 ```
 
-## Self-Hosting
-
-It's one file. Host it anywhere:
+## Other Ways to Use
 
 ```bash
-# Cloudflare Pages
+# Install globally
+npm install -g memory-app
+memory-app
+
+# Or host the HTML file anywhere — it's just one file
 npx wrangler pages deploy . --project-name memory-app
-
-# Or just open it
-open index.html
-
-# Or any static host
-cp index.html /your/web/server/
 ```
 
 ## License

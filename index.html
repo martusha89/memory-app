@@ -219,12 +219,17 @@ let SERVER_MODE = 'v2';
 
 // ── API ──────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
-  const url = BASE + path;
-  const headers = {
-    'Authorization': 'Bearer ' + SECRET,
-    'Content-Type': 'application/json',
-    ...(opts.headers || {})
-  };
+  let url = BASE + path;
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+
+  // Use whichever auth method worked during detection
+  if (window._authMode === 'query') {
+    const sep = path.includes('?') ? '&' : '?';
+    url += sep + 'secret=' + encodeURIComponent(SECRET);
+  } else {
+    headers['Authorization'] = 'Bearer ' + SECRET;
+  }
+
   let r;
   try {
     r = await fetch(url, { ...opts, headers });
@@ -242,12 +247,21 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
-// Raw fetch that doesn't throw on non-200
+// Raw fetch that doesn't throw on non-200. Tries Bearer header first, falls back to ?secret= query param
 async function probe(path) {
   try {
-    const r = await fetch(BASE + path, {
+    // Try Bearer header first
+    let r = await fetch(BASE + path, {
       headers: { 'Authorization': 'Bearer ' + SECRET, 'Content-Type': 'application/json' }
     });
+    // If 401 with header auth, try query param auth
+    if (r.status === 401) {
+      const sep = path.includes('?') ? '&' : '?';
+      r = await fetch(BASE + path + sep + 'secret=' + encodeURIComponent(SECRET), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (r.ok) window._authMode = 'query';
+    }
     return { ok: r.ok, status: r.status, data: await r.json().catch(() => null) };
   } catch (e) {
     return { ok: false, status: 0, data: null, networkError: true };

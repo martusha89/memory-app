@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Web viewer for Memory — connect to any Memory server, browse and manage memories from the browser.",
   "bin": {
-    "memory-app": "./cli.js"
+    "memory-app": "cli.js"
   },
   "files": [
     "cli.js",
@@ -21,7 +21,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/martusha89/memory-app"
+    "url": "git+https://github.com/martusha89/memory-app.git"
   },
   "homepage": "https://github.com/martusha89/memory-app"
 }

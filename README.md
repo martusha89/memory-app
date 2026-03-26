@@ -2,19 +2,46 @@
 
 Web viewer for [Memory](https://github.com/martusha89/Memory) — connect to any Memory server, browse and manage memories from the browser.
 
-## Quick Start
+**Live at [memory.aidhd.co](https://memory.aidhd.co)**
 
-```bash
-npx memory-app
+## How It Works (Privacy)
+
+**We don't have access to your memories. Nobody does except you.**
+
+This app is a static webpage — a single HTML file with no backend, no database, no server-side code. It runs entirely in your browser.
+
+When you enter your Memory server URL and secret:
+
+1. The page loads from our server (just the HTML — like downloading a file)
+2. Your browser connects **directly to your own Memory server**
+3. All your data travels between your browser and your server only
+4. Nothing passes through us. We never see your URL, your secret, or your memories.
+
+```
+You open memory.aidhd.co
+        |
+        v
+[Our server sends you the webpage — that's all it does]
+        |
+        v
+Your browser connects to YOUR-server.workers.dev
+        |
+        v
+[Your memories load from YOUR database on YOUR Cloudflare account]
 ```
 
-That's it. Opens a browser, enter your Memory server URL and secret, done.
+Your credentials are saved in your browser's localStorage (on your device, not ours). If you clear your browser data, you'll need to enter them again.
 
-### Options
+**TL;DR:** This app is just a window into your own server. We provide the window. You own everything behind it.
+
+## Quick Start
+
+Visit [memory.aidhd.co](https://memory.aidhd.co), enter your Memory server URL and secret, done.
+
+Don't have a Memory server yet? Set one up in 2 minutes:
 
 ```bash
-npx memory-app --port 4000    # Custom port (default: 3847)
-npx memory-app --no-open      # Don't auto-open browser
+npx create-memory-server
 ```
 
 ## Features
@@ -24,37 +51,26 @@ npx memory-app --no-open      # Don't auto-open browser
 - **Create, edit, delete** memories with category, tags, and importance levels
 - **Pagination** for large memory stores
 - **Keyboard shortcuts** — `/` to search, `n` for new memory, `Esc` to close
-- **Auto-reconnect** — saves credentials in localStorage
+- **Auto-reconnect** — saves credentials in your browser's localStorage
 
-### Shareable Links
+## Run It Locally
 
-Create direct links that auto-connect:
+If you'd rather not use the hosted version:
 
+```bash
+npx memory-app
 ```
-http://localhost:3847?server=https://your-server.workers.dev&secret=YOUR_SECRET
-```
 
-**Warning:** Anyone with this link has full access to the memory store. Share carefully.
+Opens a local server at `localhost:3847`. Same app, running on your machine. Or just download `index.html` and open it directly.
 
 ## Requirements
 
-The Memory server must be **v2.1+** (includes the REST API). If you're running an older version, update and redeploy:
+Your Memory server must be **v2.1+** (includes the REST API the app needs). If you set up your server before this version, update and redeploy:
 
 ```bash
 cd memory
 git pull
 npm run deploy
-```
-
-## Other Ways to Use
-
-```bash
-# Install globally
-npm install -g memory-app
-memory-app
-
-# Or host the HTML file anywhere — it's just one file
-npx wrangler pages deploy . --project-name memory-app
 ```
 
 ## License

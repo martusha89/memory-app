@@ -214,6 +214,9 @@ let TOTAL = 0;
 let OFFSET = 0;
 const LIMIT = 50;
 
+// Server compatibility mode: 'v2' (full API) or 'v1' (older/custom servers)
+let SERVER_MODE = 'v2';
+
 // ── API ──────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
   const url = BASE + path;
@@ -222,13 +225,90 @@ async function api(path, opts = {}) {
     'Content-Type': 'application/json',
     ...(opts.headers || {})
   };
-  const r = await fetch(url, { ...opts, headers });
+  let r;
+  try {
+    r = await fetch(url, { ...opts, headers });
+  } catch (e) {
+    if (e.message && e.message.includes('Failed to fetch')) {
+      throw new Error('Cannot reach server. Check the URL or try again later.');
+    }
+    throw e;
+  }
   if (r.status === 401) throw new Error('Invalid secret — check your credentials');
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
     throw new Error(d.error || 'Request failed (' + r.status + ')');
   }
   return r.json();
+}
+
+// Raw fetch that doesn't throw on non-200
+async function probe(path) {
+  try {
+    const r = await fetch(BASE + path, {
+      headers: { 'Authorization': 'Bearer ' + SECRET, 'Content-Type': 'application/json' }
+    });
+    return { ok: r.ok, status: r.status, data: await r.json().catch(() => null) };
+  } catch (e) {
+    return { ok: false, status: 0, data: null, networkError: true };
+  }
+}
+
+// ── Server Detection ─────────────────────────────────────────────────
+async function detectServer() {
+  // Try v2.1+ endpoint first
+  const v2 = await probe('/api/categories');
+  if (v2.ok && v2.data?.categories) {
+    SERVER_MODE = 'v2';
+    CATEGORIES = v2.data.categories;
+    return { success: true };
+  }
+
+  // If 401, the server exists but secret is wrong
+  if (v2.status === 401) {
+    return { success: false, error: 'Invalid secret — check your credentials.' };
+  }
+
+  // Try older API format (has /api/memories/stats or /api/memories)
+  const v1stats = await probe('/api/memories/stats');
+  if (v1stats.ok && v1stats.data) {
+    SERVER_MODE = 'v1';
+    CATEGORIES = (v1stats.data.by_category || []).map(c => c.category);
+    return { success: true };
+  }
+
+  if (v1stats.status === 401) {
+    return { success: false, error: 'Invalid secret — check your credentials.' };
+  }
+
+  // Try /health to see if it's a Memory server at all
+  const health = await probe('/health');
+  if (health.ok && health.data) {
+    const name = health.data.name || '';
+    const version = health.data.version || '';
+    if (name.toLowerCase().includes('memory')) {
+      return {
+        success: false,
+        error: 'Connected to ' + name + ' v' + version + ', but the REST API is missing.\n\nUpdate your server:\n  cd memory && git pull && npm run deploy'
+      };
+    }
+    return { success: false, error: 'Server responded but doesn\'t appear to be a Memory server. Check the URL.' };
+  }
+
+  // Try root / as last resort
+  const root = await probe('/');
+  if (root.ok && root.data?.name?.toLowerCase().includes('memory')) {
+    return {
+      success: false,
+      error: 'Connected to ' + root.data.name + ' v' + (root.data.version || '?') + ', but the REST API is missing.\n\nUpdate your server:\n  cd memory && git pull && npm run deploy'
+    };
+  }
+
+  if (root.networkError || v2.networkError) {
+    return { success: false, error: 'Cannot reach server — check the URL. Make sure it starts with https://' };
+  }
+
+  return { success: false, error: 'Server did not respond as expected. Make sure this is a Memory server URL.' };
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────
@@ -246,25 +326,14 @@ async function doLogin() {
 
   BASE = rawUrl;
 
-  try {
-    const r = await api('/api/categories');
-    CATEGORIES = r.categories;
+  const result = await detectServer();
+  if (result.success) {
     localStorage.setItem('memory_base', BASE);
     localStorage.setItem('memory_secret', SECRET);
+    localStorage.setItem('memory_mode', SERVER_MODE);
     showApp();
-  } catch (e) {
-    // Try /health as fallback to check if it's a Memory server at all
-    try {
-      const health = await fetch(BASE + '/health');
-      const data = await health.json();
-      if (data.name === 'Memory' && !data.version?.startsWith('2.1')) {
-        errEl.textContent = 'This server needs to be updated to v2.1+ for the web app. The REST API is required.';
-      } else {
-        errEl.textContent = e.message || 'Connection failed';
-      }
-    } catch {
-      errEl.textContent = e.message || 'Could not reach server — check the URL';
-    }
+  } else {
+    errEl.textContent = result.error;
     errEl.style.display = 'block';
   }
 }
@@ -305,8 +374,8 @@ async function fetchPage() {
 
   try {
     const data = await api('/api/memories?' + params);
-    ALL_MEMORIES = data.memories;
-    TOTAL = data.total;
+    ALL_MEMORIES = (data.memories || []).map(normalizeMemory);
+    TOTAL = data.total || ALL_MEMORIES.length;
     renderMemories(ALL_MEMORIES);
   } catch (e) {
     document.getElementById('contentArea').innerHTML = '<div class="empty"><p>Failed to load: ' + esc(e.message) + '</p></div>';
@@ -316,12 +385,15 @@ async function fetchPage() {
 
 async function loadStats() {
   try {
-    const s = await api('/api/stats');
+    const statsPath = SERVER_MODE === 'v1' ? '/api/memories/stats' : '/api/stats';
+    const s = await api(statsPath);
     const area = document.getElementById('statsArea');
+    const stale = s.stale_memories != null ? s.stale_memories : '-';
     area.innerHTML =
       '<div class="stat-card"><div class="label">Total</div><div class="value">' + s.total_memories + '</div></div>' +
-      '<div class="stat-card"><div class="label">Stale (90d)</div><div class="value">' + s.stale_memories + '</div></div>';
-    if (!CATEGORIES.length) CATEGORIES = s.categories_configured;
+      '<div class="stat-card"><div class="label">Stale (90d)</div><div class="value">' + stale + '</div></div>';
+    if (!CATEGORIES.length && s.categories_configured) CATEGORIES = s.categories_configured;
+    if (!CATEGORIES.length && s.by_category) CATEGORIES = s.by_category.map(c => c.category);
     window._stats = s;
   } catch (e) { console.error('stats', e); }
 }
@@ -425,9 +497,11 @@ async function doSearch() {
   try {
     const body = { query: q, limit: 20 };
     if (CURRENT_CAT) body.category = CURRENT_CAT;
-    const results = await api('/api/recall', { method: 'POST', body: JSON.stringify(body) });
-    ALL_MEMORIES = results;
-    TOTAL = results.length;
+    const raw = await api('/api/recall', { method: 'POST', body: JSON.stringify(body) });
+    // v1 servers wrap in { memories: [...] }, v2 returns array directly
+    const results = Array.isArray(raw) ? raw : (raw.memories || []);
+    ALL_MEMORIES = results.map(normalizeMemory);
+    TOTAL = ALL_MEMORIES.length;
     renderMemories(results);
   } catch (e) {
     document.getElementById('contentArea').innerHTML = '<div class="empty"><p>Search failed: ' + esc(e.message) + '</p></div>';
@@ -549,6 +623,26 @@ async function doDelete() {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+// Normalize a memory object — fills in defaults for fields older servers don't have
+function normalizeMemory(m) {
+  return {
+    id: m.id,
+    content: m.content || '',
+    category: m.category || 'general',
+    tags: Array.isArray(m.tags) ? m.tags : (typeof m.tags === 'string' ? JSON.parse(m.tags || '[]') : []),
+    importance: m.importance || 3,
+    source: m.source || 'unknown',
+    access_count: m.access_count || 0,
+    last_accessed_at: m.last_accessed_at || null,
+    created_at: m.created_at,
+    updated_at: m.updated_at || m.created_at,
+    consolidated_from: m.consolidated_from || null,
+    score: m.score != null ? m.score : null,
+    weighted_score: m.weighted_score || null,
+    match_type: m.match_type || null,
+  };
+}
+
 function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
@@ -591,16 +685,15 @@ function getUrlParams() {
   if (params.server && params.secret) {
     BASE = params.server.replace(/\/+$/, '');
     SECRET = params.secret;
-    try {
-      const r = await api('/api/categories');
-      CATEGORIES = r.categories;
+    const result = await detectServer();
+    if (result.success) {
       localStorage.setItem('memory_base', BASE);
       localStorage.setItem('memory_secret', SECRET);
-      // Clean URL
+      localStorage.setItem('memory_mode', SERVER_MODE);
       window.history.replaceState({}, '', window.location.pathname);
       showApp();
       return;
-    } catch (e) { /* fall through to login */ }
+    }
   }
 
   // Check localStorage
@@ -609,12 +702,12 @@ function getUrlParams() {
   if (b && s) {
     BASE = b;
     SECRET = s;
-    try {
-      const r = await api('/api/categories');
-      CATEGORIES = r.categories;
+    SERVER_MODE = localStorage.getItem('memory_mode') || 'v2';
+    const result = await detectServer();
+    if (result.success) {
       showApp();
       return;
-    } catch (e) { /* credentials expired, show login */ }
+    }
   }
 
   // Pre-fill from localStorage if available

@@ -1,4 +1,11 @@
-# Memory App
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:8B5CF6,100:22D3EE&height=170&section=header&text=Memory%20App&fontColor=ffffff&fontSize=48&fontAlignY=40&desc=Browser%20viewer%20for%20your%20Memory%20server&descSize=17&descAlignY=64" width="100%" />
+
+[![live memory.aidhd.co](https://img.shields.io/badge/live-memory.aidhd.co-22D3EE?style=for-the-badge&labelColor=0D1117)](https://memory.aidhd.co)
+[![license](https://img.shields.io/badge/license-Non--Commercial-A855F7?style=for-the-badge)](LICENSE)
+
+</div>
 
 Web viewer for [Memory](https://github.com/martusha89/Memory) — connect to any Memory server, browse and manage memories from the browser.
 
